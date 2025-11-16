@@ -1,0 +1,226 @@
+import Foundation
+
+// MARK: - Project Detector
+
+public struct ProjectDetector {
+
+    // MARK: - Project Type Detection
+
+    public static func detectProjectType(at path: String) -> ProjectType {
+        let url = URL(fileURLWithPath: path)
+
+        // Check for SPM package first
+        if isSPMPackage(at: url) {
+            return .spm
+        }
+
+        // Check for Xcode workspace
+        if let workspace = findWorkspace(at: url) {
+            return .xcodeWorkspace(workspace: workspace)
+        }
+
+        // Check for Xcode project
+        if let project = findProject(at: url) {
+            return .xcodeProject(project: project)
+        }
+
+        return .unknown
+    }
+
+    // MARK: - File Discovery
+
+    public static func findWorkspaceFiles(in path: String) -> [String] {
+        let url = URL(fileURLWithPath: path)
+        return findFiles(withExtension: "xcworkspace", in: url)
+    }
+
+    public static func findProjectFiles(in path: String) -> [String] {
+        let url = URL(fileURLWithPath: path)
+        return findFiles(withExtension: "xcodeproj", in: url)
+    }
+
+    public static func findPackageFiles(in path: String) -> [String] {
+        let url = URL(fileURLWithPath: path)
+        return findFiles(withName: "Package.swift", in: url)
+    }
+
+    // MARK: - Project Analysis
+
+    public static func analyzeProjectComplexity(at path: String) -> DependencyGraph? {
+        let projectType = detectProjectType(at: path)
+
+        switch projectType {
+        case .spm:
+            return analyzeSPMComplexity(at: path)
+        case .xcodeWorkspace, .xcodeProject:
+            return analyzeXcodeComplexity(at: path)
+        case .unknown:
+            return nil
+        }
+    }
+
+    // MARK: - Private Methods
+
+    private static func isSPMPackage(at url: URL) -> Bool {
+        let packageURL = url.appendingPathComponent("Package.swift")
+        return FileManager.default.fileExists(atPath: packageURL.path)
+    }
+
+    private static func findWorkspace(at url: URL) -> String? {
+        let workspaces = findFiles(withExtension: "xcworkspace", in: url)
+        return workspaces.first
+    }
+
+    private static func findProject(at url: URL) -> String? {
+        let projects = findFiles(withExtension: "xcodeproj", in: url)
+        return projects.first
+    }
+
+    private static func findFiles(withExtension fileExtension: String, in url: URL) -> [String] {
+        var result: [String] = []
+
+        let resourceKeys: [URLResourceKey] = [.nameKey, .isDirectoryKey]
+        guard let directoryEnumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: resourceKeys,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return result
+        }
+
+        for case let fileURL as URL in directoryEnumerator {
+            guard let resourceValues = try? fileURL.resourceValues(forKeys: Set(resourceKeys)),
+                  let isDirectory = resourceValues.isDirectory else {
+                continue
+            }
+
+            if !isDirectory && fileURL.pathExtension == fileExtension {
+                result.append(fileURL.path)
+            }
+        }
+
+        return result.sorted()
+    }
+
+    private static func findFiles(withName name: String, in url: URL) -> [String] {
+        var result: [String] = []
+
+        let resourceKeys: [URLResourceKey] = [.nameKey, .isDirectoryKey]
+        guard let directoryEnumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: resourceKeys,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return result
+        }
+
+        for case let fileURL as URL in directoryEnumerator {
+            guard fileURL.lastPathComponent == name else {
+                continue
+            }
+
+            result.append(fileURL.path)
+        }
+
+        return result.sorted()
+    }
+
+    private static func analyzeSPMComplexity(at path: String) -> DependencyGraph {
+        // This would integrate with smith-spmsift
+        // For now, return basic analysis
+        return DependencyGraph(
+            targetCount: 0,
+            maxDepth: 0,
+            circularDeps: false,
+            complexity: .low
+        )
+    }
+
+    private static func analyzeXcodeComplexity(at path: String) -> DependencyGraph {
+        // This would integrate with smith-xcsift
+        // For now, return basic analysis
+        return DependencyGraph(
+            targetCount: 0,
+            maxDepth: 0,
+            circularDeps: false,
+            complexity: .medium // Assume medium for Xcode projects
+        )
+    }
+}
+
+// MARK: - Build System Detection
+
+public struct BuildSystemDetector {
+
+    public static func detectAvailableBuildSystems() -> [BuildSystem] {
+        var systems: [BuildSystem] = []
+
+        // Check for Xcode
+        if isXcodeAvailable() {
+            systems.append(.xcode)
+        }
+
+        // Check for Swift
+        if isSwiftAvailable() {
+            systems.append(.swift)
+        }
+
+        // Check for Sift tools
+        if commandExists("spmsift") {
+            systems.append(.spmsift)
+        }
+
+        if commandExists("sbsift") {
+            systems.append(.sbsift)
+        }
+
+        if commandExists("xcsift") {
+            systems.append(.xcsift)
+        }
+
+        return systems
+    }
+
+    private static func isXcodeAvailable() -> Bool {
+        return commandExists("xcodebuild")
+    }
+
+    private static func isSwiftAvailable() -> Bool {
+        return commandExists("swift")
+    }
+
+    private static func commandExists(_ command: String) -> Bool {
+        let task = Process()
+        task.launchPath = "/usr/bin/which"
+        task.arguments = [command]
+
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = Pipe()
+
+        task.launch()
+        task.waitUntilExit()
+
+        return task.terminationStatus == 0
+    }
+}
+
+// MARK: - Supporting Types
+
+public enum BuildSystem {
+    case xcode
+    case swift
+    case spmsift
+    case sbsift
+    case xcsift
+
+    public var name: String {
+        switch self {
+        case .xcode: return "Xcode"
+        case .swift: return "Swift"
+        case .spmsift: return "spmsift"
+        case .sbsift: return "sbsift"
+        case .xcsift: return "xcsift"
+        }
+    }
+}
